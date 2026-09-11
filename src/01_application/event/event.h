@@ -10,9 +10,6 @@ typedef enum
 {
     EVT_START = 0,
 
-    EVT_CONFIG_DONE,
-    EVT_CONFIG_LOST,
-    
     EVT_WIFI_CONNECTED,
     EVT_WIFI_UP,
     EVT_WIFI_DISCONNECTED,

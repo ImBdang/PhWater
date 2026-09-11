@@ -1,8 +1,8 @@
 #ifndef __APP_MAIN_H__
 #define __APP_MAIN_H__
 
-#include <stdbool.h>
+#define DEBUG_ENABLE  1
 
-bool app_start(void);
+void app_task(void *arg);
 
-#endif
+#endif /* __APP_MAIN_H__ */

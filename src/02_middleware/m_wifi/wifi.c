@@ -3,8 +3,8 @@
 #include <string.h>
 
 #include "esp_wifi.h"
-#include "esp_event_loop.h"
-#include "tcpip_adapter.h"
+#include "esp_event.h"
+#include "esp_netif.h"
 #include "ping/ping_sock.h"
 #include "lwip/ip_addr.h"
 
@@ -53,17 +53,21 @@ bool m_wifi_ping(void)
 
 bool m_wifi_is_online(void)
 {
-  return ping_success;
+    return ping_success;
 }
 
 bool m_wifi_init(void)
 {
     wifi_init_config_t config = WIFI_INIT_CONFIG_DEFAULT();
 
-    tcpip_adapter_init();
-
-    if (esp_event_loop_init(NULL, NULL) != ESP_OK)
+    if (esp_netif_init() != ESP_OK)
         return false;
+
+    esp_err_t err = esp_event_loop_create_default();
+    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE)
+        return false;
+
+    esp_netif_create_default_wifi_sta();
 
     if (esp_wifi_init(&config) != ESP_OK)
         return false;
@@ -79,7 +83,6 @@ bool m_wifi_init(void)
 
     return true;
 }
-
 
 bool m_wifi_connect(const char *ssid, const char *password)
 {
@@ -108,7 +111,6 @@ bool m_wifi_connect(const char *ssid, const char *password)
 
     return true;
 }
-
 
 bool m_wifi_disconnect(void)
 {

@@ -3,10 +3,12 @@ build/
 sdkconfig.old
 
 *.txt
+!CMakeLists.txt
 
 # SDK and Toolchain
 esp/
 xtensa-lx106-elf/
+xtensa-esp-elf/
 *.tar.gz
 
 # IDE and temporary files

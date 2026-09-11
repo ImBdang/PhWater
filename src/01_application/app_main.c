@@ -2,12 +2,17 @@
 #include "STATE.h"
 #include "event.h"
 #include "wifi_hsm.h"
+#include "debug.h"
+#include "m_led.h"
+#include "m_database.h"
+
+#include <string.h>
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-#define APP_TASK_STACK_SIZE    2048
-#define APP_TASK_PRIORITY      5
+static char ssid[64];
+static char pass[64];
 
 static hsm_t app_hsm;
 
@@ -67,18 +72,17 @@ static bool app_not_configured_handler(
     const event_t *event
 )
 {
-    switch (event->id)
-    {
-        case EVT_CONFIG_DONE:
-            hsm_transition(
-                hsm,
-                STATE_CONFIGURED
-            );
-            return true;
+    wifi_hsm_dispatch(event);
 
-        default:
-            return false;
+    if (event->id == EVT_WIFI_UP)
+    {
+        hsm_transition(
+            hsm,
+            STATE_CONFIGURED
+        );
     }
+
+    return true;
 }
 
 static bool app_configured_handler(
@@ -88,11 +92,19 @@ static bool app_configured_handler(
 {
     switch (event->id)
     {
-        case EVT_CONFIG_LOST:
+        case EVT_WIFI_UP:
+            led_set_status(LED_ONLINE);
+            wifi_hsm_dispatch(event);
+            return true;
+
+        case EVT_WIFI_DISCONNECTED:
+            wifi_hsm_dispatch(event);
+
             hsm_transition(
                 hsm,
                 STATE_NOT_CONFIGURED
             );
+
             return true;
 
         default:
@@ -104,12 +116,15 @@ static bool app_configured_handler(
 static void app_not_configured_entry(hsm_t *hsm)
 {
     (void)hsm;
+    DEBUG_LOG("State entered: NOT_CONFIGURED");
+    led_set_status(LED_NOT_CONFIGURED);
 }
 
 static void app_configured_entry(hsm_t *hsm)
 {
     (void)hsm;
-
+    DEBUG_LOG("State entered: CONFIGURED");
+    led_set_status(LED_CONFIGURED);
     wifi_hsm_init();
 }
 
@@ -118,16 +133,37 @@ static void app_configured_exit(hsm_t *hsm)
     (void)hsm;
 }
 
-static void app_task(void *arg)
+void app_task(void *arg)
 {
     (void)arg;
 
     event_t event;
 
-    hsm_init(
-        &app_hsm,
-        STATE_NOT_CONFIGURED
-    );
+    event_init();
+
+    device_info_t info = {0};
+    if (get_info(&info))
+    {
+        strncpy(ssid, info.ssid, sizeof(ssid) - 1);
+        strncpy(pass, info.password, sizeof(pass) - 1);
+    }
+
+    if (ssid[0] == '\0')
+    {
+        DEBUG_LOG("SSID is empty -> Init NOT_CONFIGURED");
+        hsm_init(
+            &app_hsm,
+            STATE_NOT_CONFIGURED
+        );
+    }
+    else
+    {
+        DEBUG_LOG("SSID is configured -> Init CONFIGURED");
+        hsm_init(
+            &app_hsm,
+            STATE_CONFIGURED
+        );
+    }
 
     while (1)
     {
@@ -141,18 +177,4 @@ static void app_task(void *arg)
 
         vTaskDelay(pdMS_TO_TICKS(10));
     }
-}
-
-bool app_start(void)
-{
-    BaseType_t ret = xTaskCreate(
-        app_task,
-        "app_task",
-        APP_TASK_STACK_SIZE,
-        NULL,
-        APP_TASK_PRIORITY,
-        NULL
-    );
-
-    return ret == pdPASS;
 }

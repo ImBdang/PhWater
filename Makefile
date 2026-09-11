@@ -1,8 +1,21 @@
-PROJECT_NAME := ph_iot_monitor
+IDF_PATH ?= $(CURDIR)/esp/esp-idf
+PORT ?= /dev/ttyUSB0
 
-# Tự động nhận diện IDF_PATH nếu chưa export trong terminal
-IDF_PATH ?= $(CURDIR)/esp/ESP8266_RTOS_SDK
+.PHONY: all set-target build flash monitor clean
 
-EXTRA_COMPONENT_DIRS := $(CURDIR)/src
+all: build
 
-include $(IDF_PATH)/make/project.mk
+set-target:
+	. $(IDF_PATH)/export.sh && idf.py set-target esp32
+
+build:
+	. $(IDF_PATH)/export.sh && idf.py build
+
+flash:
+	. $(IDF_PATH)/export.sh && idf.py -p $(PORT) flash
+
+monitor:
+	. $(IDF_PATH)/export.sh && idf.py -p $(PORT) monitor
+
+clean:
+	. $(IDF_PATH)/export.sh && idf.py fullclean
