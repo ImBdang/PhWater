@@ -2,6 +2,7 @@
 #include "STATE.h"
 #include "event.h"
 #include "wifi_hsm.h"
+#include "provision_hsm.h"
 #include "debug.h"
 #include "m_led.h"
 #include "m_database.h"
@@ -11,25 +12,11 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-static char ssid[64];
-static char pass[64];
-
 static hsm_t app_hsm;
 
-static bool app_root_handler(
-    hsm_t *hsm,
-    const event_t *event
-);
-
-static bool app_not_configured_handler(
-    hsm_t *hsm,
-    const event_t *event
-);
-
-static bool app_configured_handler(
-    hsm_t *hsm,
-    const event_t *event
-);
+static bool app_root_handler(hsm_t *hsm, const event_t *event);
+static bool app_not_configured_handler(hsm_t *hsm, const event_t *event);
+static bool app_configured_handler(hsm_t *hsm, const event_t *event);
 
 static void app_not_configured_entry(hsm_t *hsm);
 static void app_configured_entry(hsm_t *hsm);
@@ -72,17 +59,24 @@ static bool app_not_configured_handler(
     const event_t *event
 )
 {
-    wifi_hsm_dispatch(event);
-
-    if (event->id == EVT_WIFI_UP)
+    if (event->id == EVT_START_PROVISION)
     {
         hsm_transition(
             hsm,
-            STATE_CONFIGURED
+            STATE_PROVISIONING
         );
+
+        return true;
     }
 
-    return true;
+    return false;
+}
+
+static void app_not_configured_entry(hsm_t *hsm)
+{
+    (void)hsm;
+    DEBUG_LOG("State entered: NOT_CONFIGURED");
+    led_set_status(LED_NOT_CONFIGURED);
 }
 
 static bool app_configured_handler(
@@ -98,13 +92,8 @@ static bool app_configured_handler(
             return true;
 
         case EVT_WIFI_DISCONNECTED:
+            led_set_status(LED_CONFIGURED);
             wifi_hsm_dispatch(event);
-
-            hsm_transition(
-                hsm,
-                STATE_NOT_CONFIGURED
-            );
-
             return true;
 
         default:
@@ -113,19 +102,11 @@ static bool app_configured_handler(
     }
 }
 
-static void app_not_configured_entry(hsm_t *hsm)
-{
-    (void)hsm;
-    DEBUG_LOG("State entered: NOT_CONFIGURED");
-    led_set_status(LED_NOT_CONFIGURED);
-}
-
 static void app_configured_entry(hsm_t *hsm)
 {
     (void)hsm;
     DEBUG_LOG("State entered: CONFIGURED");
     led_set_status(LED_CONFIGURED);
-    wifi_hsm_init();
 }
 
 static void app_configured_exit(hsm_t *hsm)
@@ -140,29 +121,42 @@ void app_task(void *arg)
     event_t event;
 
     event_init();
+    provision_hsm_init();
+    wifi_hsm_init();
 
     device_info_t info = {0};
-    if (get_info(&info))
+    if (get_info(&info) && (info.ssid[0] != '\0'))
     {
-        strncpy(ssid, info.ssid, sizeof(ssid) - 1);
-        strncpy(pass, info.password, sizeof(pass) - 1);
-    }
+        wifi_hsm_set_credentials(
+            info.ssid,
+            info.password
+        );
 
-    if (ssid[0] == '\0')
+        DEBUG_LOG("SSID is configured -> Init CONFIGURED");
+        hsm_init(
+            &app_hsm,
+            STATE_CONFIGURED
+        );
+
+        event_t evt = {
+            .id = EVT_WIFI_CONNECT_REQ
+        };
+
+        event_post(&evt);
+    }
+    else
     {
         DEBUG_LOG("SSID is empty -> Init NOT_CONFIGURED");
         hsm_init(
             &app_hsm,
             STATE_NOT_CONFIGURED
         );
-    }
-    else
-    {
-        DEBUG_LOG("SSID is configured -> Init CONFIGURED");
-        hsm_init(
-            &app_hsm,
-            STATE_CONFIGURED
-        );
+
+        event_t evt = {
+            .id = EVT_START_PROVISION
+        };
+
+        event_post(&evt);
     }
 
     while (1)

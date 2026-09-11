@@ -8,7 +8,7 @@ static adc_oneshot_unit_handle_t s_adc_handle = NULL;
 static esp_err_t hardware_gpio_init(void)
 {
     gpio_config_t io_conf = {
-        .pin_bit_mask = (1ULL << STATUS_LED_GPIO) | (1ULL << 0),
+        .pin_bit_mask = (1ULL << STATUS_LED_GPIO),
         .mode = GPIO_MODE_OUTPUT,
         .pull_up_en = GPIO_PULLUP_DISABLE,
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
@@ -21,9 +21,7 @@ static esp_err_t hardware_gpio_init(void)
         return ret;
     }
 
-    gpio_set_level(STATUS_LED_GPIO, 0);
-    gpio_set_level(0, 0);
-    return ESP_OK;
+    return gpio_set_level(STATUS_LED_GPIO, 0);
 }
 
 static esp_err_t hardware_adc_init(void)

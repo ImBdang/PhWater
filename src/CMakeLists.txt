@@ -7,6 +7,7 @@ idf_component_register(
         "01_application"
         "01_application/event"
         "01_application/hsm"
+        "01_application/hsm/provision"
         "01_application/hsm/wifi"
         "02_middleware/m_ble"
         "02_middleware/m_database"
@@ -25,4 +26,5 @@ idf_component_register(
         lwip
         nvs_flash
         log
+        bt
 )

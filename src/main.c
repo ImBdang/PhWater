@@ -20,5 +20,5 @@ void app_main(void)
     DEBUG_LOG("Hardware initialized");
 
     xTaskCreate(led_task, "led_task", 2048, NULL, 1, NULL);
-    xTaskCreate(app_task, "app_task", 2048, NULL, 5, NULL);
+    xTaskCreate(app_task, "app_task", 4096, NULL, 5, NULL);
 }
