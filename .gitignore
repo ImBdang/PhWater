@@ -2,6 +2,8 @@
 build/
 sdkconfig.old
 
+*.txt
+
 # SDK and Toolchain
 esp/
 xtensa-lx106-elf/

@@ -1,6 +1,8 @@
-#ifndef __APPLICATION__
-#define __APPLICATION__
+#ifndef __APP_MAIN_H__
+#define __APP_MAIN_H__
 
-void app_start(void);
+#include <stdbool.h>
+
+bool app_start(void);
 
 #endif
