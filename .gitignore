@@ -1,0 +1,13 @@
+# Build artifacts
+build/
+sdkconfig.old
+
+# SDK and Toolchain
+esp/
+xtensa-lx106-elf/
+*.tar.gz
+
+# IDE and temporary files
+.vscode/
+*.swp
+*~
