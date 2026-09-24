@@ -3,9 +3,6 @@
 
 #define HSM_MAX_DEPTH   8U
 
-#define SSID            "ImBdang"
-#define PASS            "thachthungdutduoi"
-
 static size_t hsm_build_path(
     const hsm_state_t *state,
     const hsm_state_t **path

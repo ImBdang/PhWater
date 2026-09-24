@@ -141,7 +141,7 @@ static void app_configured_exit(hsm_t *hsm)
     event_t event = {
         .id = EVT_SENSOR_STOP_REQ,
     };
-    event_post(&event);
+    sensor_hsm_dispatch(&event);
 }
 
 void app_task(void *arg)

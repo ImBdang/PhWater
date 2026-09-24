@@ -1,6 +1,5 @@
 #include "m_sensor.h"
 #include "hardware.h"
-#include "debug.h"
 
 esp_err_t m_sensor_read(sensor_sample_t *out_sample)
 {
@@ -34,7 +33,6 @@ esp_err_t m_sensor_read(sensor_sample_t *out_sample)
 
     if (valid_count == 0)
     {
-        DEBUG_LOG("Sensor read failed: all %d samples saturated", saturation_count);
         return ESP_ERR_INVALID_STATE;
     }
 

@@ -76,13 +76,20 @@ static void sensor_running_entry(hsm_t *hsm)
 
     if (s_sensor_timer != NULL)
     {
-        esp_timer_start_periodic(s_sensor_timer, (uint64_t)SENSOR_POLL_INTERVAL_MS * 1000ULL);
+        esp_err_t err = esp_timer_start_periodic(s_sensor_timer, (uint64_t)SENSOR_POLL_INTERVAL_MS * 1000ULL);
+        if (err != ESP_OK)
+        {
+            DEBUG_LOG("Failed to start sensor timer: %s", esp_err_to_name(err));
+        }
     }
 
     event_t event = {
         .id = EVT_SENSOR_READ_REQ,
     };
-    event_post(&event);
+    if (!event_post(&event))
+    {
+        DEBUG_LOG("Failed to post initial EVT_SENSOR_READ_REQ");
+    }
 }
 
 static void sensor_running_exit(hsm_t *hsm)
@@ -91,7 +98,11 @@ static void sensor_running_exit(hsm_t *hsm)
 
     if (s_sensor_timer != NULL)
     {
-        esp_timer_stop(s_sensor_timer);
+        esp_err_t err = esp_timer_stop(s_sensor_timer);
+        if (err != ESP_OK)
+        {
+            DEBUG_LOG("Failed to stop sensor timer: %s", esp_err_to_name(err));
+        }
     }
 }
 
@@ -152,7 +163,12 @@ void sensor_hsm_init(void)
             .arg = NULL,
             .name = "sensor_tmr",
         };
-        esp_timer_create(&timer_args, &s_sensor_timer);
+        esp_err_t err = esp_timer_create(&timer_args, &s_sensor_timer);
+        if (err != ESP_OK)
+        {
+            DEBUG_LOG("Failed to create sensor timer: %s", esp_err_to_name(err));
+            return;
+        }
     }
 
     hsm_init(&s_sensor_hsm, &g_sensor_state_idle);
