@@ -1,9 +1,13 @@
 #include "hardware.h"
+#include "debug.h"
 
 #include "driver/gpio.h"
 #include "esp_adc/adc_oneshot.h"
+#include "esp_adc/adc_cali.h"
+#include "esp_adc/adc_cali_scheme.h"
 
 static adc_oneshot_unit_handle_t s_adc_handle = NULL;
+static adc_cali_handle_t s_cali_handle = NULL;
 
 static esp_err_t hardware_gpio_init(void)
 {
@@ -26,6 +30,7 @@ static esp_err_t hardware_gpio_init(void)
 
 static esp_err_t hardware_adc_init(void)
 {
+    /* 1. Init ADC oneshot unit */
     adc_oneshot_unit_init_cfg_t init_config = {
         .unit_id = ADC_UNIT_1,
         .ulp_mode = ADC_ULP_MODE_DISABLE,
@@ -37,12 +42,34 @@ static esp_err_t hardware_adc_init(void)
         return ret;
     }
 
+    /* 2. Config ADC channel */
     adc_oneshot_chan_cfg_t config = {
         .bitwidth = ADC_BITWIDTH_DEFAULT,
         .atten = ADC_ATTEN_DB_12,
     };
 
-    return adc_oneshot_config_channel(s_adc_handle, PH_ADC_CHANNEL, &config);
+    ret = adc_oneshot_config_channel(s_adc_handle, PH_ADC_CHANNEL, &config);
+    if (ret != ESP_OK)
+    {
+        return ret;
+    }
+
+    /* 3. Init ADC calibration (Line Fitting scheme for ESP32 classic) */
+    adc_cali_line_fitting_config_t cali_config = {
+        .unit_id = ADC_UNIT_1,
+        .atten = ADC_ATTEN_DB_12,
+        .bitwidth = ADC_BITWIDTH_DEFAULT,
+        .default_vref = 0,
+    };
+
+    ret = adc_cali_create_scheme_line_fitting(&cali_config, &s_cali_handle);
+    if (ret != ESP_OK)
+    {
+        DEBUG_LOG("ADC calibration init failed: %s", esp_err_to_name(ret));
+        return ret;
+    }
+
+    return ESP_OK;
 }
 
 esp_err_t hardware_init(void)
@@ -61,5 +88,97 @@ esp_err_t hardware_init(void)
         return ret;
     }
 
+    return ESP_OK;
+}
+
+esp_err_t hardware_adc_read_raw(int *out_raw)
+{
+    if (s_adc_handle == NULL || out_raw == NULL)
+    {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    return adc_oneshot_read(s_adc_handle, PH_ADC_CHANNEL, out_raw);
+}
+
+esp_err_t hardware_adc_read_avg(int *out_avg)
+{
+    if (s_adc_handle == NULL || out_avg == NULL)
+    {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    int sum = 0;
+    int valid_count = 0;
+    int saturation_count = 0;
+
+    for (int i = 0; i < ADC_SAMPLE_COUNT; i++)
+    {
+        int raw = 0;
+        esp_err_t ret = adc_oneshot_read(s_adc_handle, PH_ADC_CHANNEL, &raw);
+        if (ret != ESP_OK)
+        {
+            return ret;
+        }
+
+        if (raw >= ADC_SATURATION_THRESH)
+        {
+            saturation_count++;
+            continue;
+        }
+
+        sum += raw;
+        valid_count++;
+    }
+
+    DEBUG_LOG("ADC samples: valid=%d, saturated=%d", valid_count, saturation_count);
+
+    if (valid_count == 0)
+    {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    *out_avg = sum / valid_count;
+    return ESP_OK;
+}
+
+esp_err_t hardware_adc_read_voltage(int *out_mv)
+{
+    if (out_mv == NULL)
+    {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    if (s_adc_handle == NULL || s_cali_handle == NULL)
+    {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    int avg_raw = 0;
+    esp_err_t ret = hardware_adc_read_avg(&avg_raw);
+    if (ret != ESP_OK)
+    {
+        return ret;
+    }
+
+    return adc_cali_raw_to_voltage(s_cali_handle, avg_raw, out_mv);
+}
+
+esp_err_t hardware_ph_read_voltage(float *out_voltage)
+{
+    if (out_voltage == NULL)
+    {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    int adc_mv = 0;
+    esp_err_t ret = hardware_adc_read_voltage(&adc_mv);
+    if (ret != ESP_OK)
+    {
+        return ret;
+    }
+
+    /* Divider 10k/10k (ratio = 0.5), so V_PO = V_ADC * 2.0 */
+    *out_voltage = ((float)adc_mv / 1000.0f) * 2.0f;
     return ESP_OK;
 }

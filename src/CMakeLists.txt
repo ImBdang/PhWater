@@ -14,6 +14,7 @@ idf_component_register(
         "02_middleware/m_debug"
         "02_middleware/m_event"
         "02_middleware/m_led"
+        "02_middleware/m_sensor"
         "02_middleware/m_wifi"
         "03_hardware"
     REQUIRES

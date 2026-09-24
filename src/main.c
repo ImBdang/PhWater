@@ -1,6 +1,7 @@
 #include "app_main.h"
 #include "hardware.h"
 #include "m_led.h"
+#include "m_sensor.h"
 #include "debug.h"
 #include "nvs_flash.h"
 #include "freertos/FreeRTOS.h"
@@ -21,4 +22,5 @@ void app_main(void)
 
     xTaskCreate(led_task, "led_task", 2048, NULL, 1, NULL);
     xTaskCreate(app_task, "app_task", 4096, NULL, 5, NULL);
+    xTaskCreate(sensor_task, "sensor_task", 2048, NULL, 3, NULL);
 }
