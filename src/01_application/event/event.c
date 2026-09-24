@@ -1,45 +1,37 @@
 #include "event.h"
-#include "ring_buff.h"
 
+#include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
 
-static event_t event_storage[EVENT_BUFF];
-static event_buffer_t event_buffer;
-
+static QueueHandle_t s_event_queue = NULL;
 
 bool event_init(void)
 {
-    return m_event_init(
-        &event_buffer,
-        event_storage,
-        EVENT_BUFF,
-        sizeof(event_t)
-    );
-}
+    if (s_event_queue != NULL)
+    {
+        return true;
+    }
 
+    s_event_queue = xQueueCreate(EVENT_BUFF, sizeof(event_t));
+    return (s_event_queue != NULL);
+}
 
 bool event_post(const event_t *event)
 {
-    if (event == NULL)
+    if (s_event_queue == NULL || event == NULL)
     {
         return false;
     }
 
-    return m_event_post(
-        &event_buffer,
-        event
-    );
+    return (xQueueSend(s_event_queue, event, 0) == pdTRUE);
 }
-
 
 bool event_get(event_t *event)
 {
-    if (event == NULL)
+    if (s_event_queue == NULL || event == NULL)
     {
         return false;
     }
 
-    return m_event_pop(
-        &event_buffer,
-        event
-    );
+    return (xQueueReceive(s_event_queue, event, 0) == pdTRUE);
 }

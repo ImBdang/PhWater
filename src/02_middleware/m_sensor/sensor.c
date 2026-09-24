@@ -1,63 +1,55 @@
 #include "m_sensor.h"
 #include "hardware.h"
-#include "event.h"
 #include "debug.h"
 
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-
-/* 
- * Chế độ chẩn đoán:
- * 1: Đọc và log raw ADC liên tục mỗi 100ms (thu thập 30-50 mẫu raw phân tích nhiễu/spike)
- * 0: Chế độ bình thường (lấy mẫu 40 lần, lọc saturation, chu kỳ 2s)
- */
-#define SENSOR_DIAGNOSTIC_RAW_STREAM   1
-
-#if SENSOR_DIAGNOSTIC_RAW_STREAM
-#define SENSOR_SAMPLE_INTERVAL_MS      100
-#else
-#define SENSOR_SAMPLE_INTERVAL_MS      2000
-#endif
-
-void sensor_task(void *pvParameters)
+esp_err_t m_sensor_read(sensor_sample_t *out_sample)
 {
-    (void)pvParameters;
-
-    DEBUG_LOG("Sensor task started (raw_stream=%d)", SENSOR_DIAGNOSTIC_RAW_STREAM);
-
-    while (1)
+    if (out_sample == NULL)
     {
-#if SENSOR_DIAGNOSTIC_RAW_STREAM
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    int sum = 0;
+    int valid_count = 0;
+    int saturation_count = 0;
+
+    for (int i = 0; i < SENSOR_ADC_SAMPLE_COUNT; i++)
+    {
         int raw = 0;
         esp_err_t ret = hardware_adc_read_raw(&raw);
-        if (ret == ESP_OK)
+        if (ret != ESP_OK)
         {
-            DEBUG_LOG("ADC RAW = %d", raw);
+            return ret;
         }
-        else
-        {
-            DEBUG_LOG("ADC RAW read error: %s", esp_err_to_name(ret));
-        }
-#else
-        int adc_mv = 0;
-        esp_err_t ret = hardware_adc_read_voltage(&adc_mv);
-        if (ret == ESP_OK)
-        {
-            float po_voltage = ((float)adc_mv / 1000.0f) * 2.0f;
-            DEBUG_LOG("ADC voltage = %d mV | PH-4502C PO: %.2f V", adc_mv, po_voltage);
 
-            event_t event = {
-                .id = EVT_PH_UPDATE,
-                .data.ph = po_voltage,
-            };
-            event_post(&event);
-        }
-        else
+        if (raw >= SENSOR_ADC_SATURATION_RAW)
         {
-            DEBUG_LOG("PH-4502C read error / saturated");
+            saturation_count++;
+            continue;
         }
-#endif
 
-        vTaskDelay(pdMS_TO_TICKS(SENSOR_SAMPLE_INTERVAL_MS));
+        sum += raw;
+        valid_count++;
     }
+
+    if (valid_count == 0)
+    {
+        DEBUG_LOG("Sensor read failed: all %d samples saturated", saturation_count);
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    int avg_raw = sum / valid_count;
+    int adc_mv = 0;
+
+    esp_err_t ret = hardware_adc_raw_to_voltage(avg_raw, &adc_mv);
+    if (ret != ESP_OK)
+    {
+        return ret;
+    }
+
+    out_sample->raw = avg_raw;
+    out_sample->adc_mv = adc_mv;
+    out_sample->po_voltage = ((float)adc_mv / 1000.0f) * SENSOR_DIVIDER_GAIN;
+
+    return ESP_OK;
 }
