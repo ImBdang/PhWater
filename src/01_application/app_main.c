@@ -6,6 +6,7 @@
 #include "sensor_hsm.h"
 #include "debug.h"
 #include "m_led.h"
+#include "m_button.h"
 #include "m_database.h"
 
 #include <string.h>
@@ -14,6 +15,8 @@
 #include "freertos/task.h"
 
 static hsm_t app_hsm;
+
+static void app_button_event_cb(m_button_event_t event);
 
 static bool app_root_handler(hsm_t *hsm, const event_t *event);
 static bool app_not_configured_handler(hsm_t *hsm, const event_t *event);
@@ -44,15 +47,38 @@ const hsm_state_t g_state_configured = {
     .exit    = app_configured_exit,
 };
 
+static void app_button_event_cb(m_button_event_t event)
+{
+    if (event == M_BUTTON_EVENT_LONG_PRESS)
+    {
+        DEBUG_LOG("Button LONG_PRESS callback -> Posting EVT_START_PROVISION");
+        event_t evt = {
+            .id = EVT_START_PROVISION,
+        };
+        event_post(&evt);
+    }
+}
+
 static bool app_root_handler(
     hsm_t *hsm,
     const event_t *event
 )
 {
     (void)hsm;
-    (void)event;
 
-    return false;
+    switch (event->id)
+    {
+        case EVT_WIFI_CONNECT_REQ:
+        case EVT_WIFI_RECONFIGURE_REQ:
+        case EVT_WIFI_CONNECTED:
+        case EVT_WIFI_UP:
+        case EVT_WIFI_DISCONNECTED:
+            wifi_hsm_dispatch(event);
+            return true;
+
+        default:
+            return false;
+    }
 }
 
 static bool app_not_configured_handler(
@@ -62,6 +88,7 @@ static bool app_not_configured_handler(
 {
     if (event->id == EVT_START_PROVISION)
     {
+        provision_hsm_set_origin(PROVISION_ORIGIN_NOT_CONFIGURED);
         hsm_transition(
             hsm,
             STATE_PROVISIONING
@@ -88,6 +115,7 @@ static bool app_configured_handler(
     switch (event->id)
     {
         case EVT_WIFI_CONNECT_REQ:
+        case EVT_WIFI_RECONFIGURE_REQ:
         case EVT_WIFI_CONNECTED:
             wifi_hsm_dispatch(event);
             return true;
@@ -118,6 +146,7 @@ static bool app_configured_handler(
 
         case EVT_START_PROVISION:
             DEBUG_LOG("EVT_START_PROVISION -> Transition CONFIGURED to PROVISIONING");
+            provision_hsm_set_origin(PROVISION_ORIGIN_CONFIGURED);
             hsm_transition(hsm, STATE_PROVISIONING);
             return true;
 
@@ -131,6 +160,12 @@ static void app_configured_entry(hsm_t *hsm)
     (void)hsm;
     DEBUG_LOG("State entered: CONFIGURED");
 
+    device_info_t info = {0};
+    if (get_info(&info) && (info.ssid[0] != '\0'))
+    {
+        wifi_hsm_set_credentials(info.ssid, info.password);
+    }
+
     if (wifi_hsm_is_online())
     {
         led_set_status(LED_ONLINE);
@@ -139,7 +174,7 @@ static void app_configured_entry(hsm_t *hsm)
     {
         led_set_status(LED_CONFIGURED);
         event_t wifi_evt = {
-            .id = EVT_WIFI_CONNECT_REQ,
+            .id = EVT_WIFI_RECONFIGURE_REQ,
         };
         event_post(&wifi_evt);
     }
@@ -167,13 +202,17 @@ void app_task(void *arg)
 
     event_t event;
 
-    event_init();
+    if (!event_init())
+    {
+        DEBUG_LOG("Fatal: event_init failed");
+        ESP_ERROR_CHECK(ESP_FAIL);
+    }
+
     provision_hsm_init();
     wifi_hsm_init();
-    if (sensor_hsm_init() != ESP_OK)
-    {
-        DEBUG_LOG("Sensor HSM init failed");
-    }
+
+    ESP_ERROR_CHECK(sensor_hsm_init());
+    ESP_ERROR_CHECK(m_button_init(app_button_event_cb));
 
     device_info_t info = {0};
     if (get_info(&info) && (info.ssid[0] != '\0'))
@@ -188,16 +227,12 @@ void app_task(void *arg)
             &app_hsm,
             STATE_CONFIGURED
         );
-
-        event_t evt = {
-            .id = EVT_WIFI_CONNECT_REQ
-        };
-
-        event_post(&evt);
+        /* Note: app_configured_entry() called during hsm_init() already posts EVT_WIFI_CONNECT_REQ */
     }
     else
     {
         DEBUG_LOG("SSID is empty -> Init NOT_CONFIGURED");
+        provision_hsm_set_origin(PROVISION_ORIGIN_NOT_CONFIGURED);
         hsm_init(
             &app_hsm,
             STATE_NOT_CONFIGURED

@@ -3,8 +3,12 @@
 
 #include <stdbool.h>
 
-#define LED_BLINK_NOT_CONFIG_MS   500U
-#define LED_BLINK_CONNECTING_MS   1500U
+#define LED_TOGGLE_NOT_CONFIGURED_MS   500U
+#define LED_TOGGLE_CONFIGURED_MS       1500U
+
+/* Aliases for backwards compatibility */
+#define LED_BLINK_NOT_CONFIG_MS        LED_TOGGLE_NOT_CONFIGURED_MS
+#define LED_BLINK_CONNECTING_MS        LED_TOGGLE_CONFIGURED_MS
 
 typedef enum
 {

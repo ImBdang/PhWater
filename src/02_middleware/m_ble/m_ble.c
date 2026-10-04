@@ -63,6 +63,8 @@ enum
 
 
 static ble_wifi_info_t s_wifi_info;
+static bool s_ssid_received = false;
+static bool s_password_received = false;
 
 static m_ble_provision_cb_t s_callback = NULL;
 
@@ -131,6 +133,12 @@ static int ble_access(
 
             s_wifi_info.ssid[len] = '\0';
             DEBUG_LOG("BLE received SSID: %s", s_wifi_info.ssid);
+            s_ssid_received = true;
+
+            if (s_ssid_received && s_password_received && s_callback != NULL)
+            {
+                s_callback(&s_wifi_info);
+            }
 
             return 0;
 
@@ -158,10 +166,10 @@ static int ble_access(
             }
 
             s_wifi_info.password[len] = '\0';
-            DEBUG_LOG("BLE received Password: %s", s_wifi_info.password);
+            DEBUG_LOG("BLE received WiFi password");
+            s_password_received = true;
 
-            if (s_wifi_info.ssid[0] != '\0' &&
-                s_callback != NULL)
+            if (s_ssid_received && s_password_received && s_callback != NULL)
             {
                 s_callback(&s_wifi_info);
             }
@@ -226,6 +234,9 @@ static int ble_gap_event(
             if (event->connect.status == 0)
             {
                 s_conn_handle = event->connect.conn_handle;
+                memset(&s_wifi_info, 0, sizeof(s_wifi_info));
+                s_ssid_received = false;
+                s_password_received = false;
             }
             else if (s_start_requested)
             {
@@ -238,6 +249,9 @@ static int ble_gap_event(
         case BLE_GAP_EVENT_DISCONNECT:
             DEBUG_LOG("BLE client disconnected, reason=%d", event->disconnect.reason);
             s_conn_handle = BLE_HS_CONN_HANDLE_NONE;
+            memset(&s_wifi_info, 0, sizeof(s_wifi_info));
+            s_ssid_received = false;
+            s_password_received = false;
             if (s_start_requested)
             {
                 ble_advertise();
@@ -374,6 +388,8 @@ bool m_ble_init(m_ble_provision_cb_t callback)
         0,
         sizeof(s_wifi_info)
     );
+    s_ssid_received = false;
+    s_password_received = false;
 
 
     if (nimble_port_init() != ESP_OK)
@@ -413,6 +429,14 @@ bool m_ble_init(m_ble_provision_cb_t callback)
 
 bool m_ble_start(void)
 {
+    memset(
+        &s_wifi_info,
+        0,
+        sizeof(s_wifi_info)
+    );
+    s_ssid_received = false;
+    s_password_received = false;
+
     s_start_requested = true;
 
     if (s_synced)
@@ -440,4 +464,12 @@ void m_ble_stop(void)
         ble_gap_adv_stop();
         DEBUG_LOG("BLE advertising stopped");
     }
+
+    memset(
+        &s_wifi_info,
+        0,
+        sizeof(s_wifi_info)
+    );
+    s_ssid_received = false;
+    s_password_received = false;
 }

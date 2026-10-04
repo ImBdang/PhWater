@@ -1,57 +1,105 @@
 #include "m_button.h"
 #include "hardware.h"
-#include "event.h"
 #include "debug.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-#define BUTTON_POLL_INTERVAL_MS     50U
+#define BUTTON_POLL_INTERVAL_MS     25U
+#define BUTTON_DEBOUNCE_MS          50U
 #define BUTTON_HOLD_TRIGGER_MS      5000U
 
-void button_init(void)
-{
-    /* Hardware GPIO is initialized in hardware_gpio_init() */
-}
+static m_button_callback_t s_button_callback = NULL;
 
-void button_task(void *arg)
+static void button_task(void *arg)
 {
     (void)arg;
 
-    uint32_t press_duration_ms = 0;
-    bool hold_event_sent = false;
+    bool last_raw_pressed = false;
+    bool debounced_pressed = false;
+    TickType_t debounce_start_tick = xTaskGetTickCount();
+    TickType_t press_start_tick = 0;
+    bool long_press_sent = false;
 
-    DEBUG_LOG("Button task started on GPIO %d (Hold 5s to provision)", BUTTON_GPIO);
+    DEBUG_LOG("Button task started (Hold 5s for long press)");
 
     while (1)
     {
-        if (hardware_button_is_pressed())
+        bool raw_pressed = hardware_button_is_pressed();
+
+        if (raw_pressed != last_raw_pressed)
         {
-            press_duration_ms += BUTTON_POLL_INTERVAL_MS;
-
-            /* Check if held continuously for 5 seconds */
-            if ((press_duration_ms >= BUTTON_HOLD_TRIGGER_MS) && !hold_event_sent)
-            {
-                DEBUG_LOG("Button held for 5s -> Triggering EVT_START_PROVISION");
-
-                event_t event = {
-                    .id = EVT_START_PROVISION,
-                };
-                if (!event_post(&event))
-                {
-                    DEBUG_LOG("Failed to post EVT_START_PROVISION");
-                }
-
-                hold_event_sent = true;
-            }
+            last_raw_pressed = raw_pressed;
+            debounce_start_tick = xTaskGetTickCount();
         }
         else
         {
-            /* Button released -> reset counter and state */
-            press_duration_ms = 0;
-            hold_event_sent = false;
+            if ((xTaskGetTickCount() - debounce_start_tick) >= pdMS_TO_TICKS(BUTTON_DEBOUNCE_MS))
+            {
+                if (raw_pressed != debounced_pressed)
+                {
+                    debounced_pressed = raw_pressed;
+                    if (debounced_pressed)
+                    {
+                        press_start_tick = xTaskGetTickCount();
+                        long_press_sent = false;
+                        if (s_button_callback != NULL)
+                        {
+                            s_button_callback(M_BUTTON_EVENT_PRESSED);
+                        }
+                    }
+                    else
+                    {
+                        long_press_sent = false;
+                        if (s_button_callback != NULL)
+                        {
+                            s_button_callback(M_BUTTON_EVENT_RELEASED);
+                        }
+                    }
+                }
+            }
+        }
+
+        if (debounced_pressed && !long_press_sent)
+        {
+            TickType_t elapsed = xTaskGetTickCount() - press_start_tick;
+            if (elapsed >= pdMS_TO_TICKS(BUTTON_HOLD_TRIGGER_MS))
+            {
+                long_press_sent = true;
+                DEBUG_LOG("Button held for 5s -> reporting LONG_PRESS");
+                if (s_button_callback != NULL)
+                {
+                    s_button_callback(M_BUTTON_EVENT_LONG_PRESS);
+                }
+            }
         }
 
         vTaskDelay(pdMS_TO_TICKS(BUTTON_POLL_INTERVAL_MS));
     }
+}
+
+esp_err_t m_button_init(m_button_callback_t callback)
+{
+    if (callback == NULL)
+    {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    s_button_callback = callback;
+
+    BaseType_t ret = xTaskCreate(
+        button_task,
+        "button_task",
+        2048,
+        NULL,
+        3,
+        NULL
+    );
+
+    if (ret != pdPASS)
+    {
+        return ESP_ERR_NO_MEM;
+    }
+
+    return ESP_OK;
 }

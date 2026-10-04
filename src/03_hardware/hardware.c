@@ -29,7 +29,8 @@ static esp_err_t hardware_gpio_init(void)
     }
 
     gpio_set_drive_capability(STATUS_LED_GPIO, GPIO_DRIVE_CAP_3);
-    gpio_set_level(STATUS_LED_GPIO, 0);
+    /* Initial state: LED OFF (active-low level 1) */
+    hardware_status_led_set(false);
 
     /* 2. Init Button (Active-LOW with internal pull-up) */
     gpio_reset_pin(BUTTON_GPIO);
@@ -49,6 +50,16 @@ static esp_err_t hardware_gpio_init(void)
     }
 
     return ESP_OK;
+}
+
+/*
+ * Status LED circuit: 5V -> 1k -> LED -> GPIO5 (Active-LOW)
+ * Level 0 (LOW, 0V)   : LED ON
+ * Level 1 (HIGH, 3.3V): LED OFF
+ */
+esp_err_t hardware_status_led_set(bool on)
+{
+    return gpio_set_level(STATUS_LED_GPIO, on ? 0 : 1);
 }
 
 bool hardware_button_is_pressed(void)

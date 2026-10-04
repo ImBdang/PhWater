@@ -10,6 +10,7 @@
 
 static char s_ssid[64] = {0};
 static char s_pass[64] = {0};
+static bool s_reconfigure_pending = false;
 
 static hsm_t s_wifi_hsm;
 
@@ -65,13 +66,18 @@ static bool wifi_root_handler(hsm_t *hsm, const event_t *event)
 
 static bool wifi_idle_handler(hsm_t *hsm, const event_t *event)
 {
-    if (event->id == EVT_WIFI_CONNECT_REQ)
+    switch (event->id)
     {
-        DEBUG_LOG("WiFi HSM: EVT_WIFI_CONNECT_REQ -> CONNECTING");
-        hsm_transition(hsm, &g_wifi_state_connecting);
-        return true;
+        case EVT_WIFI_CONNECT_REQ:
+        case EVT_WIFI_RECONFIGURE_REQ:
+            DEBUG_LOG("WiFi HSM: Connect/Reconfigure REQ in IDLE -> CONNECTING");
+            s_reconfigure_pending = false;
+            hsm_transition(hsm, &g_wifi_state_connecting);
+            return true;
+
+        default:
+            return false;
     }
-    return false;
 }
 
 static void wifi_connecting_entry(hsm_t *hsm)
@@ -89,20 +95,39 @@ static bool wifi_connecting_handler(hsm_t *hsm, const event_t *event)
     switch (event->id)
     {
         case EVT_WIFI_CONNECT_REQ:
-            DEBUG_LOG("WiFi HSM: Re-connecting with new credentials");
-            if (s_ssid[0] != '\0')
+            DEBUG_LOG("WiFi HSM: Already connecting");
+            return true;
+
+        case EVT_WIFI_RECONFIGURE_REQ:
+            DEBUG_LOG("WiFi HSM: RECONFIGURE_REQ in CONNECTING");
+            s_reconfigure_pending = true;
+            if (!m_wifi_disconnect())
             {
-                m_wifi_connect(s_ssid, s_pass);
+                s_reconfigure_pending = false;
+                if (s_ssid[0] != '\0')
+                {
+                    m_wifi_connect(s_ssid, s_pass);
+                }
             }
             return true;
 
         case EVT_WIFI_CONNECTED:
             DEBUG_LOG("WiFi state: CONNECTED (associated)");
+            s_reconfigure_pending = false;
             hsm_transition(hsm, &g_wifi_state_connected);
             return true;
 
         case EVT_WIFI_DISCONNECTED:
             DEBUG_LOG("WiFi state: DISCONNECTED while connecting");
+            if (s_reconfigure_pending)
+            {
+                s_reconfigure_pending = false;
+                DEBUG_LOG("WiFi state: Applying new credentials after disconnect");
+                if (s_ssid[0] != '\0')
+                {
+                    m_wifi_connect(s_ssid, s_pass);
+                }
+            }
             return true;
 
         default:
@@ -114,6 +139,20 @@ static bool wifi_connected_handler(hsm_t *hsm, const event_t *event)
 {
     switch (event->id)
     {
+        case EVT_WIFI_CONNECT_REQ:
+            DEBUG_LOG("WiFi HSM: Already connecting/connected");
+            return true;
+
+        case EVT_WIFI_RECONFIGURE_REQ:
+            DEBUG_LOG("WiFi HSM: RECONFIGURE_REQ in CONNECTED -> disconnecting");
+            s_reconfigure_pending = true;
+            if (!m_wifi_disconnect())
+            {
+                s_reconfigure_pending = false;
+                hsm_transition(hsm, &g_wifi_state_connecting);
+            }
+            return true;
+
         case EVT_WIFI_UP:
             DEBUG_LOG("WiFi state: ONLINE (IP acquired)");
             hsm_transition(hsm, &g_wifi_state_online);
@@ -121,6 +160,7 @@ static bool wifi_connected_handler(hsm_t *hsm, const event_t *event)
 
         case EVT_WIFI_DISCONNECTED:
             DEBUG_LOG("WiFi state: DISCONNECTED before IP -> CONNECTING");
+            s_reconfigure_pending = false;
             hsm_transition(hsm, &g_wifi_state_connecting);
             return true;
 
@@ -133,8 +173,23 @@ static bool wifi_online_handler(hsm_t *hsm, const event_t *event)
 {
     switch (event->id)
     {
+        case EVT_WIFI_CONNECT_REQ:
+            DEBUG_LOG("WiFi HSM: Already ONLINE");
+            return true;
+
+        case EVT_WIFI_RECONFIGURE_REQ:
+            DEBUG_LOG("WiFi HSM: RECONFIGURE_REQ in ONLINE -> disconnecting");
+            s_reconfigure_pending = true;
+            if (!m_wifi_disconnect())
+            {
+                s_reconfigure_pending = false;
+                hsm_transition(hsm, &g_wifi_state_connecting);
+            }
+            return true;
+
         case EVT_WIFI_DISCONNECTED:
             DEBUG_LOG("WiFi state: DISCONNECTED from ONLINE -> CONNECTING");
+            s_reconfigure_pending = false;
             hsm_transition(hsm, &g_wifi_state_connecting);
             return true;
 

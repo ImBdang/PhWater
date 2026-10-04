@@ -2,7 +2,6 @@
 #include "hardware.h"
 #include "debug.h"
 
-#include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -32,51 +31,42 @@ void status_online(void)
     led_set_status(LED_ONLINE);
 }
 
-/*
- * Mạch LED: 5V -> 1k -> LED -> D5 (Active-LOW)
- * Mức 0 (0V)   : LED SÁNG (ON)
- * Mức 1 (3.3V) : LED TẮT (OFF)
- */
-#define LED_PIN_ON   0
-#define LED_PIN_OFF  1
-
 void led_task(void *arg)
 {
     (void)arg;
-    bool level = false;
+    bool led_on = false;
     led_status_t last_status = (led_status_t)-1;
 
-    DEBUG_LOG("LED task started on GPIO %d (Active-LOW: 0=ON, 1=OFF)", STATUS_LED_GPIO);
+    DEBUG_LOG("LED task started");
 
     while (1)
     {
         if (current_status != last_status)
         {
-            DEBUG_LOG("LED active mode: %s | GPIO %d",
+            DEBUG_LOG("LED active mode: %s",
                       current_status == LED_ONLINE ? "ONLINE (Solid ON)" :
-                      current_status == LED_CONFIGURED ? "CONFIGURED (Blink 1.5s)" : "PROVISIONING (Blink 0.5s)",
-                      STATUS_LED_GPIO);
+                      current_status == LED_CONFIGURED ? "CONFIGURED (Blink 1.5s)" : "PROVISIONING (Blink 0.5s)");
             last_status = current_status;
         }
 
         switch (current_status)
         {
             case LED_ONLINE:
-                gpio_set_level(STATUS_LED_GPIO, LED_PIN_ON);
+                hardware_status_led_set(true);
                 vTaskDelay(pdMS_TO_TICKS(500));
                 break;
 
             case LED_CONFIGURED:
-                level = !level;
-                gpio_set_level(STATUS_LED_GPIO, level ? LED_PIN_ON : LED_PIN_OFF);
-                vTaskDelay(pdMS_TO_TICKS(LED_BLINK_CONNECTING_MS));
+                led_on = !led_on;
+                hardware_status_led_set(led_on);
+                vTaskDelay(pdMS_TO_TICKS(LED_TOGGLE_CONFIGURED_MS));
                 break;
 
             case LED_NOT_CONFIGURED:
             default:
-                level = !level;
-                gpio_set_level(STATUS_LED_GPIO, level ? LED_PIN_ON : LED_PIN_OFF);
-                vTaskDelay(pdMS_TO_TICKS(LED_BLINK_NOT_CONFIG_MS));
+                led_on = !led_on;
+                hardware_status_led_set(led_on);
+                vTaskDelay(pdMS_TO_TICKS(LED_TOGGLE_NOT_CONFIGURED_MS));
                 break;
         }
     }
