@@ -91,11 +91,12 @@ bool m_wifi_connect(const char *ssid, const char *password)
 
     wifi_config_t config = {0};
 
-    strncpy(
-        (char *)config.sta.ssid,
-        ssid,
-        sizeof(config.sta.ssid) - 1
-    );
+    size_t ssid_len = strlen(ssid);
+    size_t password_len = strlen(password);
+    if (!ssid_len || ssid_len > sizeof(config.sta.ssid) || password_len >= sizeof(config.sta.password))
+        return false;
+    /* A full 32-byte SSID is valid; esp_wifi does not require its trailing NUL. */
+    memcpy(config.sta.ssid, ssid, ssid_len);
 
     strncpy(
         (char *)config.sta.password,

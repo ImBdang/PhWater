@@ -10,6 +10,8 @@ idf_component_register(
         "01_application/hsm/provision"
         "01_application/hsm/sensor"
         "01_application/hsm/wifi"
+        "01_application/hsm/mqtt"
+        "02_middleware/m_protocol/mqtt"
         "02_middleware/m_ble"
         "02_middleware/m_button"
         "02_middleware/m_database"
@@ -31,4 +33,7 @@ idf_component_register(
         log
         bt
         esp_timer
+        mqtt
+        json
+        mbedtls
 )

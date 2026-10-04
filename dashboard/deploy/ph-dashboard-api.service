@@ -1,0 +1,19 @@
+[Unit]
+Description=pH Monitor MQTT, SQLite and BLE API
+After=network-online.target bluetooth.service
+Wants=network-online.target bluetooth.service
+
+[Service]
+User=haianh
+WorkingDirectory=/opt/ph-dashboard/backend
+Environment=PH_DATABASE_PATH=/var/lib/ph-monitor/history.sqlite3
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/ph-dashboard/venv/bin/uvicorn main:app --host 127.0.0.1 --port 8000 --workers 1
+Restart=always
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,20 @@
+[Unit]
+Description=pH Monitor dashboard.local mDNS alias
+Requires=avahi-daemon.service
+After=avahi-daemon.service dbus.service
+PartOf=avahi-daemon.service
+
+[Service]
+Type=simple
+User=avahi
+Group=avahi
+ExecStart=/usr/bin/python3 /usr/local/lib/ph-dashboard/dashboard-mdns.py
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

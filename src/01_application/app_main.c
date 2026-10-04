@@ -8,6 +8,7 @@
 #include "m_led.h"
 #include "m_button.h"
 #include "m_database.h"
+#include "mqtt_hsm.h"
 
 #include <string.h>
 
@@ -123,11 +124,20 @@ static bool app_configured_handler(
         case EVT_WIFI_UP:
             led_set_status(LED_ONLINE);
             wifi_hsm_dispatch(event);
+            mqtt_hsm_start();
             return true;
 
         case EVT_WIFI_DISCONNECTED:
             led_set_status(LED_CONFIGURED);
             wifi_hsm_dispatch(event);
+            mqtt_hsm_stop();
+            return true;
+
+        case EVT_MQTT_CONNECTED:
+        case EVT_MQTT_DISCONNECTED:
+        case EVT_MQTT_COMMAND:
+        case EVT_MQTT_TICK:
+            mqtt_hsm_dispatch(event);
             return true;
 
         case EVT_SENSOR_START_REQ:
@@ -169,6 +179,7 @@ static void app_configured_entry(hsm_t *hsm)
     if (wifi_hsm_is_online())
     {
         led_set_status(LED_ONLINE);
+        mqtt_hsm_start();
     }
     else
     {
@@ -189,6 +200,7 @@ static void app_configured_exit(hsm_t *hsm)
 {
     (void)hsm;
     DEBUG_LOG("State exit: CONFIGURED");
+    mqtt_hsm_stop();
 
     event_t event = {
         .id = EVT_SENSOR_STOP_REQ,
@@ -212,6 +224,7 @@ void app_task(void *arg)
     wifi_hsm_init();
 
     ESP_ERROR_CHECK(sensor_hsm_init());
+    ESP_ERROR_CHECK(mqtt_hsm_init());
     ESP_ERROR_CHECK(m_button_init(app_button_event_cb));
 
     device_info_t info = {0};
