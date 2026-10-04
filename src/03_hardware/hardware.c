@@ -11,6 +11,9 @@ static adc_cali_handle_t s_cali_handle = NULL;
 
 static esp_err_t hardware_gpio_init(void)
 {
+    /* 1. Init Status LED */
+    gpio_reset_pin(STATUS_LED_GPIO);
+
     gpio_config_t io_conf = {
         .pin_bit_mask = (1ULL << STATUS_LED_GPIO),
         .mode = GPIO_MODE_OUTPUT,
@@ -25,7 +28,32 @@ static esp_err_t hardware_gpio_init(void)
         return ret;
     }
 
-    return gpio_set_level(STATUS_LED_GPIO, 0);
+    gpio_set_drive_capability(STATUS_LED_GPIO, GPIO_DRIVE_CAP_3);
+    gpio_set_level(STATUS_LED_GPIO, 0);
+
+    /* 2. Init Button (Active-LOW with internal pull-up) */
+    gpio_reset_pin(BUTTON_GPIO);
+
+    gpio_config_t btn_conf = {
+        .pin_bit_mask = (1ULL << BUTTON_GPIO),
+        .mode = GPIO_MODE_INPUT,
+        .pull_up_en = GPIO_PULLUP_ENABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE,
+    };
+
+    ret = gpio_config(&btn_conf);
+    if (ret != ESP_OK)
+    {
+        return ret;
+    }
+
+    return ESP_OK;
+}
+
+bool hardware_button_is_pressed(void)
+{
+    return (gpio_get_level(BUTTON_GPIO) == 0);
 }
 
 static esp_err_t hardware_adc_init(void)

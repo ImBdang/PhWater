@@ -219,3 +219,8 @@ void wifi_hsm_dispatch(const event_t *event)
         hsm_dispatch(&s_wifi_hsm, event);
     }
 }
+
+bool wifi_hsm_is_online(void)
+{
+    return (s_wifi_hsm.current == &g_wifi_state_online);
+}

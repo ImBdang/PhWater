@@ -10,7 +10,6 @@ esp_err_t m_sensor_read(sensor_sample_t *out_sample)
 
     int sum = 0;
     int valid_count = 0;
-    int saturation_count = 0;
 
     for (int i = 0; i < SENSOR_ADC_SAMPLE_COUNT; i++)
     {
@@ -23,7 +22,6 @@ esp_err_t m_sensor_read(sensor_sample_t *out_sample)
 
         if (raw >= SENSOR_ADC_SATURATION_RAW)
         {
-            saturation_count++;
             continue;
         }
 
@@ -31,7 +29,7 @@ esp_err_t m_sensor_read(sensor_sample_t *out_sample)
         valid_count++;
     }
 
-    if (valid_count == 0)
+    if (valid_count < SENSOR_MIN_VALID_SAMPLES)
     {
         return ESP_ERR_INVALID_STATE;
     }

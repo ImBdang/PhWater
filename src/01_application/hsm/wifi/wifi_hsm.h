@@ -7,5 +7,6 @@
 void wifi_hsm_init(void);
 void wifi_hsm_dispatch(const event_t *event);
 bool wifi_hsm_set_credentials(const char *ssid, const char *password);
+bool wifi_hsm_is_online(void);
 
 #endif /* __WIFI_HSM_H__ */

@@ -4,6 +4,7 @@
 #include "esp_err.h"
 
 #define SENSOR_ADC_SAMPLE_COUNT         40
+#define SENSOR_MIN_VALID_SAMPLES        30
 #define SENSOR_ADC_SATURATION_RAW       4090
 #define SENSOR_DIVIDER_GAIN             2.0f
 

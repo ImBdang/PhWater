@@ -8,9 +8,13 @@
 #include "m_ble.h"
 
 #include <string.h>
+#include "esp_timer.h"
+
+#define PROVISION_TIMEOUT_US    (5ULL * 60ULL * 1000ULL * 1000ULL) /* 5 minutes */
 
 static char s_ssid[64];
 static char s_pass[64];
+static esp_timer_handle_t s_provision_timer = NULL;
 
 static bool provision_handler(hsm_t *hsm, const event_t *event);
 static bool verifying_handler(hsm_t *hsm, const event_t *event);
@@ -65,12 +69,40 @@ static void ble_provision_cb(const ble_wifi_info_t *info)
     event_post(&event);
 }
 
+static void provision_timeout_cb(void *arg)
+{
+    (void)arg;
+    DEBUG_LOG("Provisioning 5-minute timeout expired!");
+
+    event_t event = {
+        .id = EVT_PROVISION_TIMEOUT,
+    };
+    if (!event_post(&event))
+    {
+        DEBUG_LOG("Failed to post EVT_PROVISION_TIMEOUT");
+    }
+}
+
 static void provision_entry(hsm_t *hsm)
 {
     (void)hsm;
     DEBUG_LOG("State entered: PROVISIONING");
     led_set_status(LED_NOT_CONFIGURED);
     m_ble_start();
+
+    if (s_provision_timer != NULL)
+    {
+        esp_timer_stop(s_provision_timer);
+        esp_err_t err = esp_timer_start_once(s_provision_timer, PROVISION_TIMEOUT_US);
+        if (err == ESP_OK)
+        {
+            DEBUG_LOG("Provisioning 5-minute timer started");
+        }
+        else
+        {
+            DEBUG_LOG("Failed to start provision timer: %s", esp_err_to_name(err));
+        }
+    }
 }
 
 static bool provision_handler(hsm_t *hsm, const event_t *event)
@@ -84,6 +116,16 @@ static bool provision_handler(hsm_t *hsm, const event_t *event)
 
         return true;
     }
+    else if (event->id == EVT_PROVISION_TIMEOUT)
+    {
+        DEBUG_LOG("Provisioning timed out -> Returning to normal operation (CONFIGURED)");
+        hsm_transition(
+            hsm,
+            STATE_CONFIGURED
+        );
+
+        return true;
+    }
 
     return false;
 }
@@ -92,6 +134,12 @@ static void provision_exit(hsm_t *hsm)
 {
     (void)hsm;
     DEBUG_LOG("State exit: PROVISIONING");
+
+    if (s_provision_timer != NULL)
+    {
+        esp_timer_stop(s_provision_timer);
+    }
+
     m_ble_stop();
 }
 
@@ -158,4 +206,16 @@ static bool verifying_handler(hsm_t *hsm, const event_t *event)
 void provision_hsm_init(void)
 {
     m_ble_init(ble_provision_cb);
+
+    esp_timer_create_args_t timer_args = {
+        .callback = provision_timeout_cb,
+        .arg = NULL,
+        .name = "prov_timer",
+    };
+
+    esp_err_t err = esp_timer_create(&timer_args, &s_provision_timer);
+    if (err != ESP_OK)
+    {
+        DEBUG_LOG("Failed to create provision timer: %s", esp_err_to_name(err));
+    }
 }

@@ -130,6 +130,7 @@ static int ble_access(
             }
 
             s_wifi_info.ssid[len] = '\0';
+            DEBUG_LOG("BLE received SSID: %s", s_wifi_info.ssid);
 
             return 0;
 
@@ -157,6 +158,7 @@ static int ble_access(
             }
 
             s_wifi_info.password[len] = '\0';
+            DEBUG_LOG("BLE received Password: %s", s_wifi_info.password);
 
             if (s_wifi_info.ssid[0] != '\0' &&
                 s_callback != NULL)
@@ -191,14 +193,14 @@ static const struct ble_gatt_svc_def s_services[] =
                 {
                     .uuid = &s_ssid_uuid.u,
                     .access_cb = ble_access,
-                    .flags = BLE_GATT_CHR_F_WRITE,
+                    .flags = BLE_GATT_CHR_F_WRITE | BLE_GATT_CHR_F_WRITE_NO_RSP,
                     .arg = (void *)BLE_CHAR_SSID,
                 },
 
                 {
                     .uuid = &s_password_uuid.u,
                     .access_cb = ble_access,
-                    .flags = BLE_GATT_CHR_F_WRITE,
+                    .flags = BLE_GATT_CHR_F_WRITE | BLE_GATT_CHR_F_WRITE_NO_RSP,
                     .arg = (void *)BLE_CHAR_PASSWORD,
                 },
 

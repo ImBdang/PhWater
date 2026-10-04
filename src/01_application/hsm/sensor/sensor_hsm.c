@@ -154,7 +154,7 @@ static bool sensor_running_handler(hsm_t *hsm, const event_t *event)
     }
 }
 
-void sensor_hsm_init(void)
+esp_err_t sensor_hsm_init(void)
 {
     if (s_sensor_timer == NULL)
     {
@@ -167,12 +167,14 @@ void sensor_hsm_init(void)
         if (err != ESP_OK)
         {
             DEBUG_LOG("Failed to create sensor timer: %s", esp_err_to_name(err));
-            return;
+            return err;
         }
     }
 
     hsm_init(&s_sensor_hsm, &g_sensor_state_idle);
     DEBUG_LOG("Sensor HSM initialized -> IDLE");
+
+    return ESP_OK;
 }
 
 void sensor_hsm_dispatch(const event_t *event)

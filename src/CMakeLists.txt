@@ -11,6 +11,7 @@ idf_component_register(
         "01_application/hsm/sensor"
         "01_application/hsm/wifi"
         "02_middleware/m_ble"
+        "02_middleware/m_button"
         "02_middleware/m_database"
         "02_middleware/m_debug"
         "02_middleware/m_event"

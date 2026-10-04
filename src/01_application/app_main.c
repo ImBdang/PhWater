@@ -116,6 +116,11 @@ static bool app_configured_handler(
             DEBUG_LOG("PH read error: %ld", (long)event->data.error);
             return true;
 
+        case EVT_START_PROVISION:
+            DEBUG_LOG("EVT_START_PROVISION -> Transition CONFIGURED to PROVISIONING");
+            hsm_transition(hsm, STATE_PROVISIONING);
+            return true;
+
         default:
             return false;
     }
@@ -125,7 +130,19 @@ static void app_configured_entry(hsm_t *hsm)
 {
     (void)hsm;
     DEBUG_LOG("State entered: CONFIGURED");
-    led_set_status(LED_CONFIGURED);
+
+    if (wifi_hsm_is_online())
+    {
+        led_set_status(LED_ONLINE);
+    }
+    else
+    {
+        led_set_status(LED_CONFIGURED);
+        event_t wifi_evt = {
+            .id = EVT_WIFI_CONNECT_REQ,
+        };
+        event_post(&wifi_evt);
+    }
 
     event_t event = {
         .id = EVT_SENSOR_START_REQ,
@@ -153,7 +170,10 @@ void app_task(void *arg)
     event_init();
     provision_hsm_init();
     wifi_hsm_init();
-    sensor_hsm_init();
+    if (sensor_hsm_init() != ESP_OK)
+    {
+        DEBUG_LOG("Sensor HSM init failed");
+    }
 
     device_info_t info = {0};
     if (get_info(&info) && (info.ssid[0] != '\0'))
